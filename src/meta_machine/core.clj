@@ -39,6 +39,12 @@
   (println msg)
   (System/exit status))
 
+(defn mkdirp [path]
+  (let [dir (java.io.File. path)]
+    (if (.exists dir)
+      true
+      (.mkdirs dir))))
+
 (defn parse-file-w-regex [file regex]
   (with-open [rdr (io/reader file)]
     (let [matched-regex (filter #(re-find regex %) (line-seq rdr))]
@@ -52,6 +58,7 @@
 
 (defn clone-repo-locally [repo destination]
   (timbre/info "Cloning" repo "to" destination)
+  (mkdirp destination)
   (with-sh-dir destination
     (sh "git" "clone" repo)))
 
