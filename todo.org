@@ -1,0 +1,6 @@
+* _data/errors.yml - file issues for each error type (currently unknown owner type)
+** .about.yml should contain owner_type: working-group for wg-, project, guild
+* .travis.yml - should be in travis
+* Don't fork if repo is already forked
+* Don't git checkout if already stored in scratch
+* Make scratch if it doesnt exist
