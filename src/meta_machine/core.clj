@@ -51,22 +51,26 @@
       (doall matched-regex))))
 
 (defn fork-github-repo [github-token user repo]
-  (timbre/info "Forking " repo)
+  (timbre/info "Forking" repo)
   (let [url (->> {:oauth-token github-token}
                  (repos/create-fork user repo)
                  (:clone_url))] url))
 
-(defn clone-repo-locally [repo destination]
+(defn clone-repo-locally [repo url-token destination]
   (timbre/info "Cloning" repo "to" destination)
   (mkdirp destination)
   (with-sh-dir destination
-    (sh "git" "clone" repo)))
+    (sh "git" "clone" url-token))
+  (timbre/info "Creating branch owner-type-fix")
+  (with-sh-dir (str destination "/" repo) 
+    (sh "git" "branch" "owner-type-fix")))
 
 (defn fork-and-clone [user repo]
-  (let [url (fork-github-repo github-token user repo)]
+  (let [url (fork-github-repo github-token user repo)
+        url-token (string/replace url #"(https?://)" (str "$1" github-token "@"))]
     (timbre/info "Sleeping 5 seconds")
     (Thread/sleep 5000)
-    (clone-repo-locally url repo-directory)))
+    (clone-repo-locally repo url-token repo-directory)))
 
 (defn classify-full-name-owner-type [fullname]
   (cond (re-find #"(?ix)guild" fullname) "guild"
@@ -115,8 +119,10 @@
       (.write wrt "\n"))
     (with-sh-dir (str repo-directory "/" repo)
       (sh "git" "commit" "-a" "-m" msg)
-      ;;(sh "git" "push")
+      (sh "git" "push")
       )
+    (pulls/create-pull user repo msg "master" "sharms:owner-type-fix" {:oauth-token github-token
+                                                               :body "Questions? You can read more about the spec here: https://github.com/18F/about_yml"})
     ))
 
 (defn errors-unknown-owner-type
@@ -166,20 +172,20 @@
 (defn get-parsable [m]
   (filter #(= (:parse (first (rest %))) true) m))
 
-(defn get-by-kv [m k v]
+(defn match-by-kv [m k v]
   (let [v (cond (string? v) (re-pattern v) :else v)]
     (filter #(re-matches v (k (first (rest %)) "")) m)))
 
-(defn get-by-extension [m ext]
-  (get-by-kv m :extension ext))
+(defn match-by-extension [m ext]
+  (match-by-kv m :extension ext))
 
-(defn get-by-directory [m dir]
-  (get-by-kv m :directory dir))
+(defn match-by-directory [m dir]
+  (match-by-kv m :directory dir))
 
-(defn get-by-name [m name]
-  (get-by-kv m :name name))
+(defn match-by-name [m name]
+  (match-by-kv m :name name))
 
-(defn get-with-actions [m]
+(defn get-actions [m]
   (map :actions (filter #(contains? % :actions) (for [[_ v] m] v))))
 
 (defn map-file [file]
@@ -187,27 +193,16 @@
         name (first (string/split (.getName file) #"\."))
         directory (.getParent file)
         files-parsable (get-parsable file-types)
-        files-ext (get-by-extension files-parsable extension)
-        files-name (get-by-name files-ext name)
-        files-dir (get-by-directory files-name directory)
-        actions (get-with-actions files-dir)]
+        files-ext (match-by-extension files-parsable extension)
+        files-name (match-by-name files-ext name)
+        files-dir (match-by-directory files-name directory)
+        actions (get-actions files-dir)]
     (doseq [f (flatten actions)] (f file))
   )
 )
 
-(defn action [file]  
-  (println (string/split (.getPath file) #"/"))
-  (println "Taking drastic action on " file))
-
 (defn walk [dirpath]
   (doall (map map-file (file-seq (io/file dirpath)))))
-
-(defn parse-errors [] false)
-(defn parse-md [] false) 
-(defn parse-yml [] false)
-(defn validate-github [] false)
-(defn validate-team-api [] false)
-(defn validate-url [] false)
 
 (defn -main [& args] 
   (let [{:keys [options arguments errors summary]} (parse-opts args cli-options)]
