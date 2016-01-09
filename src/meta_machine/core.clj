@@ -63,7 +63,7 @@
     (sh "git" "clone" url-token))
   (timbre/info "Creating branch owner-type-fix")
   (with-sh-dir (str destination "/" repo) 
-    (sh "git" "branch" "owner-type-fix")))
+    (sh "git" "checkout" "-b" "owner-type-fix")))
 
 (defn fork-and-clone [user repo]
   (let [url (fork-github-repo github-token user repo)
@@ -113,13 +113,13 @@
   (fork-and-clone user repo)
   (let [owner-type (retrieve-owner-type repo)
         corrected (get-corrected-about-yml-with-owner-type repo owner-type)
-        msg (str ".about.yml had an invalid owner type.  This commit sets owner_type: " owner-type)]
+        msg (str ".about.yml is invalid - set owner_type: " owner-type)]
     (with-open [wrt (io/writer (about-yml-path repo))]
       (.write wrt (string/join "\n" corrected))
       (.write wrt "\n"))
     (with-sh-dir (str repo-directory "/" repo)
       (sh "git" "commit" "-a" "-m" msg)
-      (sh "git" "push")
+      (sh "git" "push" "--set-upstream" "origin" "owner-type-fix")
       )
     (pulls/create-pull user repo msg "master" "sharms:owner-type-fix" {:oauth-token github-token
                                                                :body "Questions? You can read more about the spec here: https://github.com/18F/about_yml"})
